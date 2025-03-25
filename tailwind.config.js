@@ -23,9 +23,12 @@ export default {
         'error': '#FF3131',
         'success': '#00C013',
         'secondary-orange': '#F58617',
+        'secondary-darker-orange': '#be6b14',
         'secondary-yellow': '#E2BF08',
         'secondary-blue': '#55A3EB',
+        'secondary-darker-blue': '#3c7db9',
         'secondary-purple': '#9045F0',
+        'secondary-darker-purple': '#602aa9',
         'secondary-beige': '#AAAAA4',
       }
     },

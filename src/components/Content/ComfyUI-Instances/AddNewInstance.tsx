@@ -4,15 +4,6 @@ import useAppStore from "@/store/store";
 import { LocalComfyInstance } from "@/type/local-comfy-instance";
 import { v4 as uuidv4 } from 'uuid';
 
-// Define the window.api interface
-declare global {
-    interface Window {
-        api: {
-            selectFolder: () => Promise<string>;
-            runComfyUI: (path: string) => Promise<void>;
-        }
-    }
-}
 
 interface AddNewInstanceProps {
     isOpen: boolean;

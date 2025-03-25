@@ -79,10 +79,10 @@ const ConsoleEmulator: React.FC = () => {
     return (
         <div 
             ref={consoleRef}
-            className="w-auto h-full mx-auto bg-neutral-950 text-green-400 rounded-md shadow-lg font-mono text-sm flex flex-col relative"
+            className="w-auto h-full mx-auto text-green-400 rounded-lg bg-neutral-900 font-mono text-sm flex flex-col relative"
             onClick={handleConsoleClick}
         >
-            <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-green-800 scrollbar-track-black">
+            <div className="flex-1 p-2 overflow-y-auto scrollbar-thin scrollbar-thumb-green-800 scrollbar-track-black">
                 {history.map((item, index) => (
                     <div key={index} className="mb-1">
                         {item.type === 'command' && (

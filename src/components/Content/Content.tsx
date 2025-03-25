@@ -4,10 +4,12 @@ import ComfyInstances from "@/components/Content/ComfyUI-Instances/ComfyInstance
 import Dashboard from "@/components/Content/Dashboard/Dashboard";
 import Sidebar from "@/components/Content/Sidebar/Sidebar";
 import useAppStore from "@/store/store";
+import Icon from "@mdi/react";
+import {mdiAccountBox} from "@mdi/js";
 
 function Content(){
     const [currentPage, setCurrentPage] = useState('Dashboard');
-    const connectionStatus = useAppStore(state => state.connectionStatus);
+    const {connectionStatus, user} = useAppStore();
     const ContentPage = () => {
         switch (currentPage) {
             case 'Dashboard':
@@ -38,7 +40,12 @@ function Content(){
                         {StatusIndicator()}
                         <span className={'font-mono'}>{connectionStatus}</span>
                     </div>
-                    <div className={'px-4 py-2'}>userName</div>
+                    {user && (
+                        <div className={'px-4 flex items-center gap-2 py-2'}>
+                            {user.user_metadata.user_name}
+                            <Icon path={mdiAccountBox} size={1} />
+                        </div>
+                    )}
                 </div>
                 <ContentPage />
             </div>

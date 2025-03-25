@@ -5,6 +5,8 @@ import {LocalComfyInstance} from "@/type/local-comfy-instance";
 import {ConnectionStatus} from "@/type/ConnectionStatus";
 import {LogEntry} from "@/type/LogEntry";
 import { v4 as uuidv4 } from 'uuid';
+import {tmpUserData} from "@/tmpUserData";
+import {UserData} from "@/type/UserData";
 
 type AppState = {
     localComfyInstances: LocalComfyInstance[]
@@ -16,8 +18,15 @@ type AppState = {
     connectionStatus: ConnectionStatus
     setConnectionStatus: (connectionStatus: ConnectionStatus) => void
     logs: LogEntry[]
-    setLogs: (logs: LogEntry[]) => void
+    addLog: (log: LogEntry) => void
+    clearLogs: () => void
+    user: UserData
+    setUser: (user: UserData) => void
+    isComfyRunning: boolean,
+    setIsComfyRunning: (isComfyRunning: boolean) => void,
 }
+
+const MAX_LOGS = 500;
 
 const useAppStore = create<AppState, [['zustand/persist', NonNullable<unknown>]]>(
   electronSync(
@@ -53,11 +62,38 @@ const useAppStore = create<AppState, [['zustand/persist', NonNullable<unknown>]]
                   ...state,
                   connectionStatus
               })),
-          logs: [],
-          setLogs: (logs: LogEntry[]) =>
+          isComfyRunning: false,
+          setIsComfyRunning: (isComfyRunning: boolean) =>
               set((state) => ({
                   ...state,
-                  logs
+                  isComfyRunning
+              })),
+          logs: [],
+          addLog: (log: LogEntry) =>
+              set((state) => {
+                  const newLogs = [...state.logs, log];
+                  
+                  if (newLogs.length > MAX_LOGS) {
+                      return {
+                          ...state,
+                          logs: newLogs.slice(-MAX_LOGS)
+                      };
+                  }
+                  return {
+                      ...state,
+                      logs: newLogs
+                  };
+              }),
+          clearLogs: () =>
+              set((state) => ({
+                  ...state,
+                  logs: []
+              })),  
+          user: tmpUserData,
+          setUser: (user: UserData) =>
+              set((state) => ({
+                  ...state,
+                  user
               }))
       }),
       {

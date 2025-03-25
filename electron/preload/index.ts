@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import { HardwareStatistics } from '../../src/type/HardwareStats'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('electron', {
@@ -32,6 +33,7 @@ contextBridge.exposeInMainWorld('api', {
   runComfyUI: (path: string) => ipcRenderer.invoke('api:runComfyUI', path),
   stopComfyUI: (options: { path: string; port: string }) => ipcRenderer.invoke('api:stopComfyUI', options),
   getLastImage: (path: string) => ipcRenderer.invoke('api:getLastImage',  path),
+  getHardwareStatistics: () => ipcRenderer.invoke('api:getHardwareStatistics'),
 })
 
 // --------- Preload scripts loading ---------
@@ -127,14 +129,3 @@ window.onmessage = (ev) => {
 }
 
 setTimeout(removeLoading, 4999)
-
-// Add to the window.api interface
-declare global {
-    interface Window {
-        api: {
-            selectFolder: () => Promise<string>;
-            runComfyUI: (path: string) => Promise<void>;
-            stopComfyUI: (options: { path: string; port: string }) => Promise<{ success: boolean }>;
-        }
-    }
-}

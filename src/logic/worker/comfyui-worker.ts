@@ -1,9 +1,9 @@
 import useAppStore from "@/store/store";
 import {ac} from "vitest/dist/chunks/reporters.nr4dxCkA";
+import {getToday} from "@/logic/helpers/date";
 
 interface ComfyUIConfig {
     wsURL: string;
-    imageExtensions: string[];
     reconnectInterval: number;
 }
 
@@ -25,13 +25,13 @@ class ComfyUIWorker {
     private reconnectTimeout: NodeJS.Timeout | null = null;
     private isProcessing = false;
     private knownFiles = new Set<string>();
+    private globalState: Record<string, any> = useAppStore.getState();
     static #instance: ComfyUIWorker;
 
     constructor(config: Partial<ComfyUIConfig> = {}) {
         this.ws = null;
         this.config = {
             wsURL: config.wsURL || 'ws://127.0.0.1:8188/ws',
-            imageExtensions: config.imageExtensions || ['.png', '.jpg', '.jpeg', '.webp'],
             reconnectInterval: config.reconnectInterval || 5000,
 
         };
@@ -46,35 +46,62 @@ class ComfyUIWorker {
     }
 
     onComplete(data: any) {
-        console.log('Generation completed', data)
+        this.globalState.addLog({
+            timestamp: getToday(),
+            message: `Generation completed, ${data}`,
+            type: 'success'
+        })
     }
 
     onError(error: unknown) {
-        const {setIsConnected, setConnectionStatus} = useAppStore.getState();
+        const {setIsConnected, setConnectionStatus} = this.globalState
         setIsConnected(false)
         setConnectionStatus('error')
-        console.error('Connection error, Check is your ComfyUI running.')
+
+        this.globalState.addLog({
+            timestamp: getToday(),
+            message: 'Connection error, Check is your ComfyUI running.',
+            type: 'error'
+        })
     }
 
     onConnect() {
-        const {setIsConnected, setConnectionStatus} = useAppStore.getState();
+        const {setIsConnected, setConnectionStatus} = this.globalState
         setIsConnected(true)
         setConnectionStatus('connected')
-        console.log('Connected to ComfyUI')
+
+        this.globalState.addLog({
+            timestamp: getToday(),
+            message: 'Connected to ComfyUI',
+            type: 'success'
+        })
     }
 
     onDisconnect() {
-        const {setIsConnected, setConnectionStatus} = useAppStore.getState();
+        const {setIsConnected, setConnectionStatus} = this.globalState
         setIsConnected(false)
         setConnectionStatus('disconnected')
-        console.log('Disconnected from ComfyUI')
+
+        this.globalState.addLog({
+            timestamp: getToday(),
+            message: 'Disconnected from ComfyUI',
+            type: 'info'
+        })
     }
 
     onImageFound(imagePath: string) {
         try {
-            console.log('New generated image found and uploaded:', imagePath);
+            this.globalState.addLog({
+                timestamp: getToday(),
+                message: `New generated image found and uploaded:, ${imagePath}`,
+                type: 'success'
+            })
         } catch (error) {
-            console.error('Error uploading image:', error instanceof Error ? error.message : String(error));
+            this.globalState.addLog({
+                timestamp: getToday(),
+                message: `Error uploading image:, ${error instanceof Error ? error.message : String(error)}`,
+                type: 'success'
+            })
         }
     }
 
@@ -88,7 +115,7 @@ class ComfyUIWorker {
     }
 
      async findLastImage() {
-         const {activeInstance} = useAppStore.getState();
+         const {activeInstance} = this.globalState
          if (activeInstance?.pathTo) {
             return await window.api.getLastImage(activeInstance?.pathTo);
          }
@@ -127,10 +154,19 @@ class ComfyUIWorker {
 
             if (queueRemaining === 1 && !this.isProcessing) {
                 this.isProcessing = true;
-                console.log('Generation started');
+                this.globalState.addLog({
+                    timestamp: getToday(),
+                    message: 'Generation started',
+                    type: 'info'
+                })
             } else if (queueRemaining === 0 && this.isProcessing) {
                 this.isProcessing = false;
-                console.log('Generation completed');
+
+                this.globalState.addLog({
+                    timestamp: getToday(),
+                    message: 'Generation completed',
+                    type: 'success'
+                })
                 setTimeout(() => {
                     //this.findNewImages();
                     this.onComplete(data);

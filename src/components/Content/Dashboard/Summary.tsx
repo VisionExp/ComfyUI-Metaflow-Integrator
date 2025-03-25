@@ -5,16 +5,21 @@ import Icon from "@mdi/react";
 import ComfyUIWorker from "@/logic/worker/comfyui-worker";
 import {getToday, sanitizeDateTime} from "@/logic/helpers/date";
 import {LocalImage} from "@/type/LocalImage";
-
+import {HardwareStatistics} from "@/type/HardwareStats";
 
 const Summary: React.FC = () => {
-    const activeInstance = useAppStore(state => state.activeInstance);
-    const isConnected = useAppStore(state => state.isConnected);
-    const setIsConnected = useAppStore(state => state.setIsConnected);
-
-    const [isComfyRunning, setIsComfyRunning] = useState(false);
+    const {
+        activeInstance,
+        isConnected,
+        setIsConnected,
+        user,
+        addLog,
+        isComfyRunning,
+        setIsComfyRunning
+    } = useAppStore();
     const [lastRun, setLastRun] = useState('');
     const [lastConnection, setLastConnection] = useState('');
+    const [stats, setStats] = useState<HardwareStatistics | null>(null);
     const [lastImage, setLastImage] = useState<LocalImage | undefined>(undefined);
     const worker = ComfyUIWorker.instance;
     useEffect(() => {
@@ -44,15 +49,53 @@ const Summary: React.FC = () => {
         }
     }
     const handleRunComfyInstance = async () => {
-        await window.api.runComfyUI(activeInstance?.pathTo ?? '');
+        //await window.api.runComfyUI(activeInstance?.pathTo ?? '');
         
         setIsComfyRunning(true);
         const lastDate = sanitizeDateTime(getToday())
         setLastRun(lastDate ?? '');
     }
-    const handleStopComfyInstance = ()=> {
-        setIsComfyRunning(false);
+    const handleStopComfyInstance = async ()=> {
+        if (activeInstance){
+            setIsComfyRunning(false);
+            //await window.api.stopComfyUI(activeInstance.pathTo, activeInstance.port);
+        }else {
+            addLog({
+                message: "There is no active ComfyUI instances",
+                timestamp: getToday(),
+                type: 'error'
+
+            })
+        }
     }
+
+
+    useEffect(() => {
+        const handleStatsUpdate = (_: any, data: HardwareStatistics) => {
+            setStats(data);
+        };
+
+        // Listen for hardware stats updates
+        window.electron.on('hardware-stats-update', handleStatsUpdate);
+
+        return () => {
+            window.electron.removeListener('hardware-stats-update', handleStatsUpdate);
+        };
+    }, []);
+
+
+    const getPercentColor = (percent: number): string => {
+        if (percent > 0 && percent <= 35){
+            return 'text-success'
+        }else if(percent > 35 && percent <= 85){
+            return 'text-secondary-orange'
+        }else if(percent > 85){
+            return 'text-error'
+        }else {
+            return 'text-success'
+        }
+    };
+    if (!stats) return null;
     return (
         <div className="bg-gray-900 text-white mt-12 p-3 w-auto h-full overflow-hidden">
             <div className="flex h-24 items-center justify-evenly gap-3 mb-3">
@@ -90,8 +133,8 @@ const Summary: React.FC = () => {
                         ) : (
                             <>
                             <p className="text-gray-400 text-xs">Last Run: {lastRun}</p>
-                                <button onClick={handleRunComfyInstance} className={'w-full bg-secondary-blue'}>Run ComfyUI
-                                </button>
+                            <button onClick={handleRunComfyInstance}
+                                    className={'w-full hover:bg-secondary-darker-blue bg-secondary-blue transition-all duration-500'}>Run ComfyUI</button>
                             </>
 
                         )}
@@ -111,27 +154,93 @@ const Summary: React.FC = () => {
                         ) : (
                             <>
                                 <p className="text-gray-400 text-xs">Last Connect: {lastConnection}</p>
-                                <button onClick={handleConnectToComfy} className={'w-full bg-secondary-orange'}>Connect</button>
+                                <button onClick={handleConnectToComfy}
+                                        className={'w-full hover:bg-secondary-darker-orange bg-secondary-orange transition-all duration-500'}>Connect</button>
                             </>
 
                         )}
                     </div>
                 </div>
             </div>
-            <div className={'w-full h-64 flex p-2 mt-8'}>
-                {lastImage && (
-                    <div className="w-64 h-64 bg-neutral-900 cursor-pointer relative group">
-                        <span className="absolute top-0 left-0 w-full py-1 text-center font-bold bg-neutral-900 opacity-0 group-hover:opacity-75 transition-opacity duration-500">
-                            Last Generated Image
-                        </span>
-                        <img className="w-full h-full rounded-xl" src={lastImage.data} alt={lastImage.name}/>
-                        <span className="absolute bottom-0 w-full text-center py-2 left-0 bg-neutral-900 opacity-0 group-hover:opacity-75 transition-opacity duration-500">
-                            {lastImage.name}
-                        </span>
-                    </div>
-                )}
+            <div className="grid grid-cols-12 text-white h-72 mt-6 gap-2">
+                <div className={"col-span-6 bg-gray-800 bg-opacity-50 rounded-xl relative"}>
+                    {lastImage && (
+                        <>
+                            <div className="z-10 absolute px-4 py-2">
+                                <h1 className="text-3xl font-bold ">Welcome, <br/>{user && user.user_metadata.user_name}
+                                </h1>
 
+                            </div>
+                            <div className="w-full h-full absolute ">
+                                <img
+                                    src={lastImage.data}
+                                    alt={lastImage.name}
+                                    className="w-full h-full rounded-xl object-cover opacity-50"
+                                />
+                            </div>
+                        </>
+
+
+                    )}
+                </div>
+                <div className={"col-span-3 bg-gray-800 bg-opacity-50 px-2 rounded-xl"}>
+                    <h2 className="text-xl text-center font-bold mb-1">System Resources</h2>
+                    <div className="space-y-2 my-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-neutral-400">CPU</span>
+                            <span
+                                className={`${getPercentColor(stats.cpu.usage)} text-sm font-bold`}>{stats.cpu.usage.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-neutral-800 rounded-full h-2">
+                            <div
+                                className="bg-gradient-to-r from-secondary-darker-purple to-secondary-blue h-2 rounded-full transition-all duration-500"
+                                style={{width: `${stats.cpu.usage}%`}}
+                            />
+                        </div>
+                    </div>
+                    <div className="space-y-2 my-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-neutral-400">RAM</span>
+                            <span
+                                className={`text-sm ${getPercentColor(stats.ram.usedPercent)} font-bold`}>{stats.ram.usedPercent.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-neutral-800 rounded-full h-2">
+                            <div
+                                className="bg-gradient-to-r from-secondary-darker-orange to-secondary-orange h-2 rounded-full transition-all duration-500"
+                                style={{width: `${stats.ram.usedPercent}%`}}
+                            />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-neutral-400">GPU:</span>
+                            <span className="text-sm font-bold">{stats.gpu[0]?.name || 'N/A'}</span>
+                        </div>
+                        <div className="text-xs flex items-center justify-between text-neutral-400">
+                            <span>VRAM: </span>
+                            <span
+                                className={"text-sm text-white font-bold"}>{stats.gpu[0]?.vram ? `${(stats.gpu[0].vram / 1024).toFixed(1)} GB` : 'N/A'}</span>
+                        </div>
+                        {stats.gpu[1] && (
+                            <>
+                                <div className="flex justify-between gap-4 items-center">
+                                    <span className="text-sm text-neutral-400">GPU:</span>
+                                    <span className="text-sm text-right font-bold">{stats.gpu[1]?.name || 'N/A'}</span>
+                                </div>
+                                <div className="text-xs flex items-center justify-between text-neutral-400">
+                                    <span>VRAM: </span>
+                                    <span
+                                        className={"text-sm text-white text-right font-bold"}>{stats.gpu[1]?.vram ? `${(stats.gpu[1].vram / 1024).toFixed(1)} GB` : 'N/A'}</span>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+                <div className={"col-span-3 bg-gray-800 bg-opacity-50 rounded-xl"}>
+                    <h2 className="text-xl text-center font-bold">Statistic</h2>
+                </div>
             </div>
+
         </div>
     );
 };

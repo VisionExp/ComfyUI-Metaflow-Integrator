@@ -9,6 +9,7 @@ import {existsSync, readdirSync, statSync, readFileSync} from 'fs'
 import {spawn} from 'child_process'
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import si from 'systeminformation';
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -96,8 +97,49 @@ async function createWindow() {
     update(win)
 }
 
+let hardwareStatsInterval: NodeJS.Timeout | null = null;
+
+function startHardwareStatsBroadcast() {
+    // Start sending hardware stats every second
+    hardwareStatsInterval = setInterval(async () => {
+        try {
+            const stats = await getHardwareStats();
+            if (win) {
+                win.webContents.send('hardware-stats-update', stats);
+            }
+        } catch (error) {
+            console.error('Error sending hardware stats:', error);
+        }
+    }, 1000);
+}
+
+async function getHardwareStats() {
+    const cpuLoad = await si.currentLoad();
+    const memInfo = await si.mem();
+    const gpuInfo = await si.graphics();
+
+    return {
+        cpu: {
+            usage: cpuLoad.currentLoad,
+            cores: cpuLoad.cpus.map(core => core.load)
+        },
+        ram: {
+            total: memInfo.total,
+            used: memInfo.used,
+            free: memInfo.free,
+            usedPercent: (memInfo.used / memInfo.total) * 100
+        },
+        gpu: gpuInfo.controllers.map(gpu => ({
+            name: gpu.model,
+            vram: gpu.vram,
+            driverVersion: gpu.driverVersion
+        }))
+    };
+}
+
 app.whenReady().then(() => {
     createWindow()
+    startHardwareStatsBroadcast()
 
     // Handle directory selection dialog
     ipcMain.handle("api:openDirectory", async () => {
@@ -373,13 +415,52 @@ app.whenReady().then(() => {
                     creationTime: stats.birthtime.getTime()
                 };
             });
-        console.log(imageFiles)
+
         const sortedFiles = imageFiles.sort((a, b) => b.creationTime - a.creationTime);
 
         return sortedFiles.length > 0 ? sortedFiles[0] : undefined;
 
     })
+    ipcMain.handle('api:getComfyUIStatus', async (_, arg) => {
+        const status = await execAsync(`ps aux | grep python | grep "${arg}/main.py"`);
+        return status;
+    })
+    ipcMain.handle('api:getHardwareStatistics', async () => {
+        try {
+            // Get CPU usage
+            const cpuLoad = await si.currentLoad();
+            const cpuUsage = cpuLoad.currentLoad;
 
+            // Get memory usage
+            const memInfo = await si.mem();
+            const ramUsage = {
+                total: memInfo.total,
+                used: memInfo.used,
+                free: memInfo.free,
+                usedPercent: (memInfo.used / memInfo.total) * 100
+            };
+
+            // Get GPU information
+            const gpuInfo = await si.graphics();
+            const gpuUsage = gpuInfo.controllers.map(gpu => ({
+                name: gpu.model,
+                vram: gpu.vram,
+                driverVersion: gpu.driverVersion
+            }));
+
+            return {
+                cpu: {
+                    usage: cpuUsage,
+                    cores: cpuLoad.cpus.map(core => core.load)
+                },
+                ram: ramUsage,
+                gpu: gpuUsage
+            };
+        } catch (error) {
+            console.error('Error getting hardware statistics:', error);
+            throw error;
+        }
+    })
     app.on('window-all-closed', () => {
         win = null
         if (process.platform !== 'darwin') app.quit()
@@ -419,4 +500,11 @@ app.whenReady().then(() => {
         }
     })
 })
+
+// Clean up interval when app is quitting
+app.on('before-quit', () => {
+    if (hardwareStatsInterval) {
+        clearInterval(hardwareStatsInterval);
+    }
+});
 

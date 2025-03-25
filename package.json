@@ -29,8 +29,9 @@
     "nanoid": "^5.0.9",
     "node-fetch": "^3.3.2",
     "prompt-sync": "^4.2.0",
+    "systeminformation": "^5.25.11",
     "uuid": "^11.1.0",
-    "ws": "^8.18.0",
+    "ws": "^8.18.1",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
