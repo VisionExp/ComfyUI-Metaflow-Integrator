@@ -1,6 +1,6 @@
 import Modal from "@/components/Modal/Modal";
 import React, { useState } from "react";
-import { LocalComfyInstance } from "@/type/local-comfy-instance";
+import { LocalInstance } from "@/type/local-instance";
 import useAppStore from "@/store/store";
 import Icon from "@mdi/react";
 import { mdiPencil, mdiCheck, mdiClose } from "@mdi/js";
@@ -8,7 +8,7 @@ import { mdiPencil, mdiCheck, mdiClose } from "@mdi/js";
 interface InstanceDetailsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    instance: LocalComfyInstance | null;
+    instance: LocalInstance | null;
 }
 
 function InstanceDetailsModal(props: InstanceDetailsModalProps) {
@@ -19,8 +19,8 @@ function InstanceDetailsModal(props: InstanceDetailsModalProps) {
     const [isEditingPort, setIsEditingPort] = useState<boolean>(false);
     const [isDeleting, setIsDeleting] = useState<boolean>(false);
     
-    const localComfyInstances = useAppStore(state => state.localComfyInstances);
-    const setLocalComfyInstances = useAppStore(state => state.setLocalComfyInstances);
+    const localComfyInstances = useAppStore(state => state.localInstances);
+    const setLocalComfyInstances = useAppStore(state => state.setLocalInstances);
     const setActiveInstance = useAppStore(state => state.setActiveInstance);
     const activeInstance = useAppStore(state => state.activeInstance);
     
@@ -50,7 +50,7 @@ function InstanceDetailsModal(props: InstanceDetailsModalProps) {
         }
         
         const updatedInstances = localComfyInstances.map(item => 
-            item.pathTo === instance.pathTo ? { ...item, name: newName } : item
+            item.id === instance.id ? { ...item, name: newName } : item
         );
         
         setLocalComfyInstances(updatedInstances);
@@ -71,7 +71,7 @@ function InstanceDetailsModal(props: InstanceDetailsModalProps) {
         }
         
         const updatedInstances = localComfyInstances.map(item => 
-            item.pathTo === instance.pathTo ? { ...item, port: newPort } : item
+            item.id === instance.id ? { ...item, port: newPort } : item
         );
         
         setLocalComfyInstances(updatedInstances);
@@ -81,19 +81,19 @@ function InstanceDetailsModal(props: InstanceDetailsModalProps) {
     const handleUse = () => {
         // Set this instance as the active instance
         setActiveInstance(instance);
-        console.log(`Using instance: ${instance.name} at path: ${instance.pathTo}`);
+        console.log(`Using instance: ${instance.name}`);
         
         // Close the modal after selecting
         onClose();
     };
     
-    const handleDelete = () => {
+    const handleDelete = async() => {
         if (isDeleting) {
             // Confirm deletion
             const updatedInstances = localComfyInstances.filter(item => 
-                item.pathTo !== instance.pathTo
+                item.id !== instance.id
             );
-            
+            await window.api.removeContainer(instance.name);
             setLocalComfyInstances(updatedInstances);
             onClose();
         } else {
@@ -232,15 +232,6 @@ function InstanceDetailsModal(props: InstanceDetailsModalProps) {
                                             </button>
                                         </>
                                     )}
-                                </div>
-                            </div>
-                            
-                            <div className="mb-6">
-                                <label className="block text-sm text-white mb-1">
-                                    Path
-                                </label>
-                                <div className="bg-neutral-600 rounded-lg px-2 py-1 text-white truncate" title={instance.pathTo}>
-                                    {instance.pathTo}
                                 </div>
                             </div>
                             

@@ -14,9 +14,14 @@ interface ImportMeta {
 interface Window {
   api: {
     selectFolder: () => Promise<string>;
-    runComfyUI: (path: string) => Promise<void>;
-    getLastImage: (path: string) => Promise<LocalImage>;
+    getGeneratedImages: (path: string) => Promise<LocalImage>;
     getHardwareStatistics: () => Promise<HardwareStatistics>;
+    createContainerAndFoldersStructure: (
+      containerName: string,
+      port: number,
+      jupyterPort: number,
+      networkName: string
+    ) => Promise<{ success: boolean; path?: string; error?: string }>;
   }
   // expose in the `electron/preload/index.ts`
   ipcRenderer: import('electron').IpcRenderer

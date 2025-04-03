@@ -1,6 +1,6 @@
 import React, {useState} from "react";
 
-import ComfyInstances from "@/components/Content/ComfyUI-Instances/ComfyInstances";
+import ContainerInstances from "@/components/Content/Instances/ContainerInstances";
 import Dashboard from "@/components/Content/Dashboard/Dashboard";
 import Sidebar from "@/components/Content/Sidebar/Sidebar";
 import useAppStore from "@/store/store";
@@ -14,8 +14,8 @@ function Content(){
         switch (currentPage) {
             case 'Dashboard':
                 return <Dashboard />
-            case 'ComfyUI Instances':
-                return <ComfyInstances />;
+            case 'Instances':
+                return <ContainerInstances />;
             default:
                 return <></>;
         }

@@ -1,0 +1,29 @@
+  {{containerName}}:
+      build:
+        context: ./containers/{{containerName}}
+        dockerfile: Dockerfile
+        args:
+          BUILDKIT_INLINE_CACHE: 1
+      container_name: {{containerName}}
+      restart: unless-stopped
+      ports:
+        - "{{port}}:8188"
+        - "{{jupyterPort}}:8888"
+      volumes:
+        - ./containers/{{containerName}}/output:/home/ComfyUI/output
+        - ./containers/{{containerName}}/input:/home/ComfyUI/input
+        - {{shared_models_dir}}:/home/ComfyUI/models
+        - ./containers/{{containerName}}/custom_nodes:/home/ComfyUI/custom_nodes
+        - ./containers/{{containerName}}/notebooks:/notebooks
+      deploy:
+        resources:
+          reservations:
+            devices:
+              - driver: nvidia
+                count: all
+                capabilities: [gpu]
+      restart: unless-stopped
+      runtime: nvidia
+      command: ["/bin/bash", "/startup.sh"]
+      networks:
+        - {{networkName}}

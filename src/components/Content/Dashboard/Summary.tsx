@@ -14,17 +14,18 @@ const Summary: React.FC = () => {
         setIsConnected,
         user,
         addLog,
-        isComfyRunning,
+        isInstanceRunning: isComfyRunning,
         setIsComfyRunning
     } = useAppStore();
     const [lastRun, setLastRun] = useState('');
     const [lastConnection, setLastConnection] = useState('');
     const [stats, setStats] = useState<HardwareStatistics | null>(null);
-    const [lastImage, setLastImage] = useState<LocalImage | undefined>(undefined);
+    const [generatedImages, setGeneratedImages] = useState<LocalImage[] | undefined>(undefined);
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const worker = ComfyUIWorker.instance;
     useEffect(() => {
-        worker.findLastImage().then(r => {
-            setLastImage(r);
+        worker.findGeneratedImage().then(arr => {
+            setGeneratedImages(arr);
         })
     }, []);
     const handleConnectToComfy = () => {
@@ -49,7 +50,7 @@ const Summary: React.FC = () => {
         }
     }
     const handleRunComfyInstance = async () => {
-        //await window.api.runComfyUI(activeInstance?.pathTo ?? '');
+        await window.api.runComfyUI(activeInstance?.pathTo ?? '');
         
         setIsComfyRunning(true);
         const lastDate = sanitizeDateTime(getToday())
@@ -58,7 +59,7 @@ const Summary: React.FC = () => {
     const handleStopComfyInstance = async ()=> {
         if (activeInstance){
             setIsComfyRunning(false);
-            //await window.api.stopComfyUI(activeInstance.pathTo, activeInstance.port);
+            await window.api.stopComfyUI(activeInstance.pathTo, activeInstance.port);
         }else {
             addLog({
                 message: "There is no active ComfyUI instances",
@@ -68,7 +69,17 @@ const Summary: React.FC = () => {
             })
         }
     }
-
+    useEffect(() => {
+        if (!generatedImages?.length) return;
+        
+        const interval = setInterval(() => {
+            setCurrentImageIndex(prevIndex => 
+                prevIndex === generatedImages.length - 1 ? 0 : prevIndex + 1
+            );
+        }, 7500);
+    
+        return () => clearInterval(interval);
+    }, [generatedImages?.length]);
 
     useEffect(() => {
         const handleStatsUpdate = (_: any, data: HardwareStatistics) => {
@@ -101,7 +112,7 @@ const Summary: React.FC = () => {
             <div className="flex h-24 items-center justify-evenly gap-3 mb-3">
                 <div className="bg-gray-800 bg-opacity-50 rounded-lg h-full p-3 flex flex-1 justify-between items-center">
                     <div>
-                        <p className="text-gray-400 text-xs">Active ComfyUI</p>
+                        <p className="text-gray-400 text-xs">Active Instance</p>
                         <h3 className="text-xl font-bold">
                             {activeInstance && activeInstance.name}
                         </h3>
@@ -134,7 +145,7 @@ const Summary: React.FC = () => {
                             <>
                             <p className="text-gray-400 text-xs">Last Run: {lastRun}</p>
                             <button onClick={handleRunComfyInstance}
-                                    className={'w-full hover:bg-secondary-darker-blue bg-secondary-blue transition-all duration-500'}>Run ComfyUI</button>
+                                    className={'w-full hover:bg-secondary-darker-blue bg-secondary-blue transition-all duration-500'}>Run Instance</button>
                             </>
 
                         )}
@@ -164,19 +175,28 @@ const Summary: React.FC = () => {
             </div>
             <div className="grid grid-cols-12 text-white h-72 mt-6 gap-2">
                 <div className={"col-span-6 bg-gray-800 bg-opacity-50 rounded-xl relative"}>
-                    {lastImage && (
+                    {generatedImages && generatedImages.length > 0 && (
                         <>
                             <div className="z-10 absolute px-4 py-2">
                                 <h1 className="text-3xl font-bold ">Welcome, <br/>{user && user.user_metadata.user_name}
                                 </h1>
 
                             </div>
-                            <div className="w-full h-full absolute ">
-                                <img
-                                    src={lastImage.data}
-                                    alt={lastImage.name}
-                                    className="w-full h-full rounded-xl object-cover opacity-50"
-                                />
+                            <div className="relative w-full h-full">
+                                {generatedImages.map((image, index) => (
+                                    <div
+                                        key={index}
+                                        className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                                            index === currentImageIndex ? 'opacity-50' : 'opacity-0'
+                                        }`}
+                                    >
+                                        <img
+                                            src={image.data}
+                                            alt={image.name}
+                                            className="w-full h-full rounded-xl object-cover"
+                                        />
+                                    </div>
+                                ))}
                             </div>
                         </>
 
@@ -184,7 +204,16 @@ const Summary: React.FC = () => {
                     )}
                 </div>
                 <div className={"col-span-3 bg-gray-800 bg-opacity-50 px-2 rounded-xl"}>
-                    <h2 className="text-xl text-center font-bold mb-1">System Resources</h2>
+                    <h2 className="text-lg px-1 font-bold">Statistic</h2>
+                    <ul>
+                        <li>Generated Images</li>
+                        <li>Generated Videos</li>
+                        <li>Something data</li>
+                        <li>Another Data</li>
+                    </ul>
+                </div>
+                <div className={"col-span-3 bg-gray-800 bg-opacity-50 px-2 rounded-xl"}>
+                    <h2 className="text-lg px-1 font-bold mb-1">System Resources</h2>
                     <div className="space-y-2 my-4">
                         <div className="flex justify-between items-center">
                             <span className="text-sm text-neutral-400">CPU</span>
@@ -235,9 +264,6 @@ const Summary: React.FC = () => {
                             </>
                         )}
                     </div>
-                </div>
-                <div className={"col-span-3 bg-gray-800 bg-opacity-50 rounded-xl"}>
-                    <h2 className="text-xl text-center font-bold">Statistic</h2>
                 </div>
             </div>
 

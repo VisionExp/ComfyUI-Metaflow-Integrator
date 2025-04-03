@@ -30,10 +30,20 @@ contextBridge.exposeInMainWorld('electron', {
 contextBridge.exposeInMainWorld('api', {
   // Method to open a directory selection dialog
   selectFolder: () => ipcRenderer.invoke('api:openDirectory'),
-  runComfyUI: (path: string) => ipcRenderer.invoke('api:runComfyUI', path),
-  stopComfyUI: (options: { path: string; port: string }) => ipcRenderer.invoke('api:stopComfyUI', options),
-  getLastImage: (path: string) => ipcRenderer.invoke('api:getLastImage',  path),
-  getHardwareStatistics: () => ipcRenderer.invoke('api:getHardwareStatistics'),
+  getGeneratedImages: (path: string) => ipcRenderer.invoke('api:getGeneratedImages',  path),
+  getHardwareStatistics: () => ipcRenderer.invoke('api:getHardwareStatistics'), 
+  createContainerAndFoldersStructure: (
+    containerName: string, 
+    port: number, 
+    jupyterPort: number, 
+    networkName: string
+  ) => ipcRenderer.invoke('api:createContainerAndFoldersStructure', {
+    containerName,
+    port,
+    jupyterPort,
+    networkName
+  }),
+  removeContainer: (containerName: string) => ipcRenderer.invoke('api:removeContainer', {containerName}),
 })
 
 // --------- Preload scripts loading ---------

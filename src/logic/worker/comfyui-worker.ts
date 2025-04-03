@@ -114,10 +114,10 @@ class ComfyUIWorker {
         }
     }
 
-     async findLastImage() {
+     async findGeneratedImage() {
          const {activeInstance} = this.globalState
          if (activeInstance?.pathTo) {
-            return await window.api.getLastImage(activeInstance?.pathTo);
+            return await window.api.getGeneratedImages(activeInstance?.pathTo);
          }
      }
 

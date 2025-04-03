@@ -1,27 +1,21 @@
 import Icon from "@mdi/react";
 import {mdiDesktopClassic, mdiPlus} from "@mdi/js";
 import useAppStore from "@/store/store";
-import { LocalComfyInstance } from "@/type/local-comfy-instance";
+import { LocalInstance } from "@/type/local-instance";
 import {useCallback, useState} from "react";
-import AddNewInstance from "@/components/Content/ComfyUI-Instances/AddNewInstance";
-import InstanceDetailsModal from "@/components/Content/ComfyUI-Instances/InstanceDetailsModal";
+import AddNewInstance from "@/components/Content/Instances/AddNewInstance";
+import InstanceDetailsModal from "@/components/Content/Instances/InstanceDetailsModal";
 
-function ComfyInstances(){
+function ContainerInstances(){
     const [isAddNewInstance, setIsAddNewInstance] = useState(false);
-    const [selectedInstance, setSelectedInstance] = useState<LocalComfyInstance | null>(null);
+    const [selectedInstance, setSelectedInstance] = useState<LocalInstance | null>(null);
     const [isInstanceDetailsOpen, setIsInstanceDetailsOpen] = useState(false);
     
-    const localComfyInstances = useAppStore(state => state.localComfyInstances);
-    const setLocalComfyInstances = useAppStore(state => state.setLocalComfyInstances);
-    const activeInstance = useAppStore(state => state.activeInstance);
+    const {localInstances, activeInstance} = useAppStore();
 
-    const instances = Array.isArray(localComfyInstances) ? localComfyInstances : [];
-    
-    const handleAddNew = useCallback(() => {
-        setIsAddNewInstance(true);
-    }, []);
-    
-    const handleInstanceClick = useCallback((instance: LocalComfyInstance) => {
+    const instances = Array.isArray(localInstances) ? localInstances : [];
+
+    const handleInstanceClick = useCallback((instance: LocalInstance) => {
         setSelectedInstance(instance);
         setIsInstanceDetailsOpen(true);
     }, []);
@@ -37,8 +31,8 @@ function ComfyInstances(){
     return (
         <div className={"w-full"}>
             <div className={'h-12 w-auto mt-12 px-4'}>
-                <span className={'block font-semibold'}>ComfyUI Instances</span>
-                <span className={'block text-sm text-neutral-400'}>Here you can choose or add to list ComfyUI that installed on your machine</span>
+                <span className={'block font-semibold'}>Container Instances</span>
+                <span className={'block text-sm text-neutral-400'}>Here you can choose or add to list Container that installed on your machine</span>
             </div>
             <div className={'w-auto flex justify-start items-center gap-2 mt-4 px-4 py-2'}>
                 <div className={"mr-4 flex flex-col items-center"}>
@@ -51,7 +45,7 @@ function ComfyInstances(){
                     </div>
                     <span className={'text-sm mt-2'}>Add New</span>
                 </div>
-                {instances.length > 0 && instances.map((instance: LocalComfyInstance, index: number) => {
+                {instances.length > 0 && instances.map((instance: LocalInstance, index: number) => {
                     const isActive = activeInstance && activeInstance.id === instance.id;
                     return (
                         <div 
@@ -96,4 +90,4 @@ function ComfyInstances(){
     )
 }
 
-export default ComfyInstances;
+export default ContainerInstances;

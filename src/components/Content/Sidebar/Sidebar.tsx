@@ -14,7 +14,7 @@ function Sidebar(props: SidebarProps){
             icon: <Icon path={mdiViewDashboard}  size={1} />,
         },
         {
-            name: 'ComfyUI Instances',
+            name: 'Instances',
             icon: <Icon path={mdiGrain}  size={1} />,
         },
         {
@@ -28,7 +28,7 @@ function Sidebar(props: SidebarProps){
             <div className="flex items-center gap-3 mb-6">
                 <img src={logoMetaflow} className="w-10 h-auto" alt='logo'/>
                 <div>
-                    <div className="font-semibold">Metaflow ComfyUI Integrator</div>
+                    <div className="font-semibold">Metaflow OrchesMeister</div>
                 </div>
             </div>
             <div className="w-full flex justify-between flex-col">

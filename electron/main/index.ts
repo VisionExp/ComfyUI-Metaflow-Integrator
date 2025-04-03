@@ -5,11 +5,16 @@ import path from 'node:path'
 import os from 'node:os'
 import {update} from './update'
 import {join} from 'path'
-import {existsSync, readdirSync, statSync, readFileSync} from 'fs'
-import {spawn} from 'child_process'
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import {existsSync, readdirSync, statSync, readFileSync, mkdirSync, PathLike, promises as fsPromises} from 'fs'
 import si from 'systeminformation';
+import {
+    copyResourcesOnFirstRun,
+    createContainerAndFoldersStructure,
+    createOrUpdateDockerCompose,
+    startHardwareStatsBroadcast,
+    stopStatsBroadcast,
+    updateDockerComposeFile
+} from "./utils";
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -46,6 +51,8 @@ if (!app.requestSingleInstanceLock()) {
 let win: BrowserWindow | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
+const appWorkDirectory = path.join(os.homedir(), 'Documents', 'MetaflowOrchesMeister');
+const baseDockerComposeFile = join(appWorkDirectory, 'docker-compose.yml');
 
 function sendLog(message: string, type: 'info' | 'error' | 'success' = 'info') {
     if (win) {
@@ -93,53 +100,24 @@ async function createWindow() {
         return {action: 'deny'}
     })
 
+    function ensureDirectoryExists(directoryPath: PathLike) {
+        if (!existsSync(directoryPath)) {
+            mkdirSync(directoryPath, { recursive: true });
+        }
+    }
+    // Ensure the directory exists BEFORE trying to write the file
+    ensureDirectoryExists(appWorkDirectory);
+    await createOrUpdateDockerCompose(baseDockerComposeFile)
+    await copyResourcesOnFirstRun(app, appWorkDirectory)
     // Auto update
     update(win)
 }
 
-let hardwareStatsInterval: NodeJS.Timeout | null = null;
 
-function startHardwareStatsBroadcast() {
-    // Start sending hardware stats every second
-    hardwareStatsInterval = setInterval(async () => {
-        try {
-            const stats = await getHardwareStats();
-            if (win) {
-                win.webContents.send('hardware-stats-update', stats);
-            }
-        } catch (error) {
-            console.error('Error sending hardware stats:', error);
-        }
-    }, 1000);
-}
-
-async function getHardwareStats() {
-    const cpuLoad = await si.currentLoad();
-    const memInfo = await si.mem();
-    const gpuInfo = await si.graphics();
-
-    return {
-        cpu: {
-            usage: cpuLoad.currentLoad,
-            cores: cpuLoad.cpus.map(core => core.load)
-        },
-        ram: {
-            total: memInfo.total,
-            used: memInfo.used,
-            free: memInfo.free,
-            usedPercent: (memInfo.used / memInfo.total) * 100
-        },
-        gpu: gpuInfo.controllers.map(gpu => ({
-            name: gpu.model,
-            vram: gpu.vram,
-            driverVersion: gpu.driverVersion
-        }))
-    };
-}
 
 app.whenReady().then(() => {
     createWindow()
-    startHardwareStatsBroadcast()
+    startHardwareStatsBroadcast(win)
 
     // Handle directory selection dialog
     ipcMain.handle("api:openDirectory", async () => {
@@ -157,249 +135,69 @@ app.whenReady().then(() => {
         return null;
     });
 
-    ipcMain.handle("api:runComfyUI", async (_, arg: string) => {
+    ipcMain.handle('api:createContainerAndFoldersStructure', async (_, arg:{containerName: string, port: number, jupyterPort: number, networkName: string}) => {
         try {
-            const mainPyPath = join(arg, 'main.py');
-
-            // Check if main.py exists in the specified path
-            if (!existsSync(mainPyPath)) {
-                throw new Error(`main.py not found in path: ${arg}`);
+            // Ensure base directory exists
+            const containerDir = path.join(appWorkDirectory,'containers', arg.containerName);
+            await fsPromises.mkdir(containerDir, { recursive: true });
+            
+            // Create required subdirectories
+            const subdirs = ['output', 'custom_nodes', 'input', 'notebooks'];
+            for (const dir of subdirs) {
+                await fsPromises.mkdir(path.join(containerDir, dir), { recursive: true });
             }
-
-            // Try with embedded Python first
-            const possibleEmbeddedPaths = [
-                join(path.dirname(arg), 'python_embeded', 'python.exe'),
-                join(path.dirname(arg), 'python_embedded', 'python.exe')
-            ];
-
-            let embeddedPythonPath = '';
-            for (const path of possibleEmbeddedPaths) {
-                if (existsSync(path)) {
-                    embeddedPythonPath = path;
-                    sendLog(`Found embedded Python at: ${path}`);
-                    break;
-                }
+            
+            // Get templates directory path
+            const templatesDir = process.env.NODE_ENV === 'development' 
+                ? path.join(process.cwd(), 'resources', 'templates') 
+                : path.join(process.resourcesPath, 'templates');
+            
+            // Copy startup template to the container folder
+            const startupTemplatePath = path.join(templatesDir, 'startup.template');
+            
+            if (existsSync(startupTemplatePath)) {
+                const startupContent = await fsPromises.readFile(startupTemplatePath, 'utf8');
+                await fsPromises.writeFile(path.join(containerDir, 'startup.sh'), startupContent, {
+                    mode: 0o755 // Make file executable
+                });
+                sendLog(`Created startup.sh for ${arg.containerName}`);
+            } else {
+                sendLog(`Warning: startup.template not found at ${startupTemplatePath}`, 'error');
             }
-
-            if (embeddedPythonPath) {
-                sendLog('Using embedded Python...');
-                const embeddedProcess = spawn(embeddedPythonPath, ['-s', 'main.py', '--listen'], {
-                    cwd: arg,
-                    stdio: 'pipe',
-                    shell: process.platform === 'win32'
-                });
-
-                embeddedProcess.stdout.on('data', (data) => {
-                    sendLog(`ComfyUI (embedded) stdout: ${data}`);
-                });
-
-                embeddedProcess.stderr.on('data', (data) => {
-                    sendLog(`ComfyUI (embedded): ${data}`, 'error');
-                });
-
-                embeddedProcess.on('close', (code) => {
-                    if (code !== 0) {
-                        sendLog(`ComfyUI (embedded) process exited with code ${code}`, 'error');
-                    }
-                });
-
-                return {success: true, pid: embeddedProcess.pid, usingEmbedded: true};
+            
+            // Copy Dockerfile template to the container folder
+            const dockerfileTemplatePath = path.join(templatesDir, "ComfyUI-docker-templates", 'dockerfile.template');
+            
+            if (existsSync(dockerfileTemplatePath)) {
+                const dockerfileContent = await fsPromises.readFile(dockerfileTemplatePath, 'utf8');
+                await fsPromises.writeFile(path.join(containerDir, 'Dockerfile'), dockerfileContent);
+                sendLog(`Created Dockerfile for ${arg.containerName}`);
+            } else {
+                sendLog(`Warning: dockerfile.template not found at ${dockerfileTemplatePath}`, 'error');
             }
-
-            // If embedded Python not found, try system Python
-            sendLog('Embedded Python not found, trying system Python...');
-            const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
-            const pythonPath = await new Promise<string>((resolve, reject) => {
-                const checkPython = spawn('where', [pythonCommand], {
-                    stdio: 'pipe',
-                    shell: true
-                });
-
-                let output = '';
-                checkPython.stdout.on('data', (data) => {
-                    output += data.toString();
-                });
-
-                checkPython.on('close', (code) => {
-                    if (code === 0 && output.trim()) {
-                        resolve(output.trim().split('\n')[0]);
-                    } else {
-                        reject(new Error(`Python not found in PATH. Command: ${pythonCommand}`));
-                    }
-                });
-            });
-
-            sendLog(`Using system Python at: ${pythonPath}`);
-
-            // Try running with system Python
-            const pythonProcess = spawn(pythonPath, ['main.py', '--listen'], {
-                cwd: arg,
-                stdio: 'pipe',
-                shell: process.platform === 'win32'
-            });
-
-            // Handle process output
-            pythonProcess.stdout.on('data', (data) => {
-                sendLog(`ComfyUI stdout: ${data}`);
-            });
-
-            pythonProcess.stderr.on('data', (data) => {
-                const errorStr = data.toString();
-                sendLog(`ComfyUI stderr: ${errorStr}`, 'error');
-
-                // Check for PyTorch-related errors
-                if (errorStr.includes('torch') || errorStr.includes('PyTorch')) {
-                    sendLog('PyTorch error detected, trying embedded Python again...');
-                    // Try one more time with embedded Python
-                    if (existsSync(embeddedPythonPath)) {
-                        sendLog('Found embedded Python, trying to use it...');
-                        const embeddedProcess = spawn(embeddedPythonPath, ['-s', 'main.py', '--listen'], {
-                            cwd: arg,
-                            stdio: 'pipe',
-                            shell: process.platform === 'win32'
-                        });
-
-                        embeddedProcess.stdout.on('data', (data) => {
-                            sendLog(`ComfyUI (embedded) stdout: ${data}`);
-                        });
-
-                        embeddedProcess.stderr.on('data', (data) => {
-                            sendLog(`ComfyUI (embedded) stderr: ${data}`, 'error');
-                        });
-
-                        embeddedProcess.on('close', (code) => {
-                            if (code !== 0) {
-                                sendLog(`ComfyUI (embedded) process exited with code ${code}`, 'error');
-                            }
-                        });
-
-                        return {success: true, pid: embeddedProcess.pid, usingEmbedded: true};
-                    }
-                }
-            });
-
-            // Handle process exit
-            pythonProcess.on('close', (code) => {
-                if (code !== 0) {
-                    sendLog(`ComfyUI process exited with code ${code}`, 'error');
-                    if (code === 9009) {
-                        sendLog('Python is not found in PATH. Please ensure Python is installed and added to PATH.', 'error');
-                    }
-                }
-            });
-
-            return {success: true, pid: pythonProcess.pid, usingEmbedded: false};
+            
+            // Update docker-compose file
+            await updateDockerComposeFile(arg.containerName, arg.port, arg.jupyterPort, arg.networkName);
+            
+            sendLog(`Container structure created for ${arg.containerName}`);
+            return { success: true, path: containerDir };
         } catch (error) {
-            sendLog(`Failed to start ComfyUI: ${error}`, 'error');
-            throw error;
+            sendLog(`Error creating container structure: ${error}`, 'error');
+            return { success: false, error: String(error) };
         }
     });
-
-    const execAsync = promisify(exec);
-
-    async function isPortInUse(port: number): Promise<boolean> {
+    ipcMain.handle('api:removeContainer', async (_, arg:{containerName: string}) => {
         try {
-            if (process.platform === 'win32') {
-                const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
-                return stdout.length > 0;
-            } else {
-                const { stdout } = await execAsync(`lsof -i :${port}`);
-                return stdout.length > 0;
-            }
+            const containerDir = path.join(appWorkDirectory, 'containers', arg.containerName);
+            await fsPromises.rm(containerDir, { recursive: true, force: true });
+            sendLog(`Removed container ${arg.containerName}`);
+            return { success: true };
         } catch (error) {
-            return false; // If command fails, assume port is not in use
+            sendLog(`Error removing container: ${error}`, 'error');
+            return { success: false, error: String(error) };
         }
-    }
-
-    async function findPythonProcess(scriptPath: string): Promise<number | null> {
-        try {
-            if (process.platform === 'win32') {
-                const { stdout } = await execAsync('wmic process where caption="python.exe" get commandline,processid');
-                const lines = stdout.split('\n');
-                for (const line of lines) {
-                    if (line.includes('main.py') && line.includes(scriptPath)) {
-                        const pid = line.match(/(\d+)\s*$/)?.[1];
-                        return pid ? parseInt(pid) : null;
-                    }
-                }
-            } else {
-                const { stdout } = await execAsync(`ps aux | grep python | grep "${scriptPath}/main.py"`);
-                const pid = stdout.split(/\s+/)[1];
-                return pid ? parseInt(pid) : null;
-            }
-        } catch (error) {
-            return null;
-        }
-        return null;
-    }
-
-    async function killProcess(pid: number): Promise<boolean> {
-        try {
-            if (process.platform === 'win32') {
-                await execAsync(`taskkill /PID ${pid} /F`);
-            } else {
-                await execAsync(`kill -9 ${pid}`);
-            }
-            return true;
-        } catch (error) {
-            console.error('Error killing process:', error);
-            return false;
-        }
-    }
-
-    ipcMain.handle('api:stopComfyUI', async (_, arg: { path: string; port: string }) => {
-        try {
-            const port = parseInt(arg.port || '8188');
-            let success = false;
-
-            // First try to find and kill by port
-            if (await isPortInUse(port)) {
-                sendLog(`Port ${port} is in use, attempting to free it...`);
-                if (process.platform === 'win32') {
-                    const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
-                    const pid = stdout.match(/(\d+)\s*$/)?.[1];
-                    if (pid) {
-                        success = await killProcess(parseInt(pid));
-                        if (success) {
-                            sendLog(`Successfully stopped process using port ${port}`, 'success');
-                        }
-                    }
-                } else {
-                    const { stdout } = await execAsync(`lsof -i :${port} -t`);
-                    const pid = parseInt(stdout.trim());
-                    if (pid) {
-                        success = await killProcess(pid);
-                        if (success) {
-                            sendLog(`Successfully stopped process using port ${port}`, 'success');
-                        }
-                    }
-                }
-            }
-
-            // If port-based kill didn't work or port wasn't in use, try finding by script path
-            if (!success) {
-                sendLog('Attempting to find ComfyUI process by script path...');
-                const pid = await findPythonProcess(arg.path);
-                if (pid) {
-                    success = await killProcess(pid);
-                    if (success) {
-                        sendLog(`Successfully stopped ComfyUI process (PID: ${pid})`, 'success');
-                    }
-                }
-            }
-
-            if (!success) {
-                sendLog('No running ComfyUI process found', 'error');
-            }
-
-            return { success };
-        } catch (error) {
-            sendLog(`Error stopping ComfyUI: ${error}`, 'error');
-            throw error;
-        }
-    });
-
-    ipcMain.handle('api:getLastImage', async (_, arg) => {
+    })
+    ipcMain.handle('api:getGeneratedImages', async (_, arg) => {
         const imagesPath = join(arg, 'output')
 
         const files = readdirSync(imagesPath);
@@ -418,12 +216,8 @@ app.whenReady().then(() => {
 
         const sortedFiles = imageFiles.sort((a, b) => b.creationTime - a.creationTime);
 
-        return sortedFiles.length > 0 ? sortedFiles[0] : undefined;
+        return sortedFiles.length > 0 ? sortedFiles : undefined;
 
-    })
-    ipcMain.handle('api:getComfyUIStatus', async (_, arg) => {
-        const status = await execAsync(`ps aux | grep python | grep "${arg}/main.py"`);
-        return status;
     })
     ipcMain.handle('api:getHardwareStatistics', async () => {
         try {
@@ -461,6 +255,18 @@ app.whenReady().then(() => {
             throw error;
         }
     })
+
+    ipcMain.handle('api:createBaseDockerComposeFile', async () => {
+        try {
+            await createOrUpdateDockerCompose(baseDockerComposeFile);
+            return baseDockerComposeFile;
+        } catch (error) {
+            // Error is already logged in createOrUpdateDockerCompose
+            // Optionally, you could return null or a specific error indicator here
+            return null; 
+        }
+    })
+
     app.on('window-all-closed', () => {
         win = null
         if (process.platform !== 'darwin') app.quit()
@@ -503,8 +309,6 @@ app.whenReady().then(() => {
 
 // Clean up interval when app is quitting
 app.on('before-quit', () => {
-    if (hardwareStatsInterval) {
-        clearInterval(hardwareStatsInterval);
-    }
+   stopStatsBroadcast()
 });
 

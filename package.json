@@ -1,8 +1,8 @@
 {
-  "name": "metaflow-comfyui-integrator",
+  "name": "metaflow-orchesmeister",
   "version": "1.0.0",
   "main": "dist-electron/main/index.js",
-  "description": "Metaflow ComfyUI Integrator",
+  "description": "Metaflow OrchesMeister",
   "license": "MIT",
   "private": true,
   "debug": {
@@ -17,6 +17,15 @@
     "preview": "vite preview",
     "pretest": "vite build --mode=test",
     "test": "vitest run"
+  },
+  "build": {
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": ["**/*"]
+      }
+    ]
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",
