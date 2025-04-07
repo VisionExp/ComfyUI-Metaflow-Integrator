@@ -22,7 +22,6 @@
               - driver: nvidia
                 count: all
                 capabilities: [gpu]
-      restart: unless-stopped
       runtime: nvidia
       command: ["/bin/bash", "/startup.sh"]
       networks:

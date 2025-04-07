@@ -23,7 +23,9 @@
       {
         "from": "resources",
         "to": "resources",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   },
@@ -35,6 +37,7 @@
     "electron-updater": "^6.3.9",
     "form-data": "^4.0.1",
     "formdata-node": "^6.0.3",
+    "js-yaml": "^4.1.0",
     "nanoid": "^5.0.9",
     "node-fetch": "^3.3.2",
     "prompt-sync": "^4.2.0",
@@ -45,6 +48,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.48.2",
+    "@types/js-yaml": "^4.0.9",
     "@types/prompt-sync": "^4.2.3",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

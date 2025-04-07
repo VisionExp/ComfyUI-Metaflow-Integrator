@@ -19,10 +19,14 @@ function InstanceDetailsModal(props: InstanceDetailsModalProps) {
     const [isEditingPort, setIsEditingPort] = useState<boolean>(false);
     const [isDeleting, setIsDeleting] = useState<boolean>(false);
     
-    const localComfyInstances = useAppStore(state => state.localInstances);
-    const setLocalComfyInstances = useAppStore(state => state.setLocalInstances);
-    const setActiveInstance = useAppStore(state => state.setActiveInstance);
-    const activeInstance = useAppStore(state => state.activeInstance);
+    const {
+        localInstances,
+        setLocalInstances,
+        setActiveInstance,
+        activeInstance,
+        removeUsedPort,
+        } = useAppStore();
+  
     
     // Initialize the values when the instance changes
     React.useEffect(() => {
@@ -42,21 +46,21 @@ function InstanceDetailsModal(props: InstanceDetailsModalProps) {
     }, [isOpen]);
     
     if (!instance) return null;
-    
+    //TODO Change name in docker compose file and name of container folder
     const handleSaveName = () => {
         if (newName.trim() === "") {
             alert("Instance name cannot be empty");
             return;
         }
         
-        const updatedInstances = localComfyInstances.map(item => 
+        const updatedInstances = localInstances.map(item => 
             item.id === instance.id ? { ...item, name: newName } : item
         );
         
-        setLocalComfyInstances(updatedInstances);
+        setLocalInstances(updatedInstances);
         setIsEditingName(false);
     };
-    
+    //TODO Change port in docker-compose file and port of container 
     const handleSavePort = () => {
         if (newPort.trim() === "") {
             alert("Port cannot be empty");
@@ -70,11 +74,11 @@ function InstanceDetailsModal(props: InstanceDetailsModalProps) {
             return;
         }
         
-        const updatedInstances = localComfyInstances.map(item => 
+        const updatedInstances = localInstances.map(item => 
             item.id === instance.id ? { ...item, port: newPort } : item
         );
         
-        setLocalComfyInstances(updatedInstances);
+        setLocalInstances(updatedInstances);
         setIsEditingPort(false);
     };
     
@@ -90,11 +94,13 @@ function InstanceDetailsModal(props: InstanceDetailsModalProps) {
     const handleDelete = async() => {
         if (isDeleting) {
             // Confirm deletion
-            const updatedInstances = localComfyInstances.filter(item => 
+            const updatedInstances = localInstances.filter(item => 
                 item.id !== instance.id
             );
             await window.api.removeContainer(instance.name);
-            setLocalComfyInstances(updatedInstances);
+            removeUsedPort(parseInt(instance.port || "8188"));
+            removeUsedPort(parseInt(instance.jupyterPort || "8888"));
+            setLocalInstances(updatedInstances);
             onClose();
         } else {
             // Show delete confirmation

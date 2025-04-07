@@ -7,6 +7,7 @@ import * as childProcess from 'child_process';
 import { platform } from 'os';
 import { join } from 'path';
 import { app } from 'electron';
+import * as yaml from 'js-yaml';
 
 let hardwareStatsInterval: NodeJS.Timeout | null = null;
 
@@ -218,5 +219,62 @@ ${templateContent}`
     } catch (error) {
         console.error('Error updating docker-compose file:', error);
         throw error;
+    }
+}
+
+export function removeServiceFromCompose(
+    dockerComposeContent: string,
+    serviceNameToRemove: string
+): string {
+    try {
+        // 1. Parse the YAML content into a JavaScript object
+        // The `load` function can return any type, so we assert/check it later.
+        const doc: any = yaml.load(dockerComposeContent);
+
+        // 2. Basic validation: Check if it's a valid object and has a 'services' section
+        if (typeof doc !== 'object' || doc === null || typeof doc.services !== 'object' || doc.services === null) {
+            console.warn("Input does not seem to be a valid docker-compose structure or is missing the 'services' key. Returning original content.");
+            return dockerComposeContent;
+        }
+
+        // 3. Check if the service to remove actually exists within 'services'
+        if (doc.services.hasOwnProperty(serviceNameToRemove)) {
+            // 4. Delete the service key-value pair from the 'services' object
+            delete doc.services[serviceNameToRemove];
+            console.log(`Service '${serviceNameToRemove}' found and removed.`);
+
+            
+
+        } else {
+            // 5. Service not found - return the original content
+            console.warn(`Service '${serviceNameToRemove}' not found in the docker-compose content. Returning original content.`);
+            return dockerComposeContent;
+        }
+
+    
+      let dumpedYaml = yaml.dump(doc, {
+        indent: 2,
+        noRefs: true,   
+        lineWidth: -1,  
+    });
+
+   
+    dumpedYaml = dumpedYaml.replace(/^(\s*)services:\s*\{\}\s*$/m, '$1services:');
+
+    return dumpedYaml;
+
+    } catch (e) {
+        // Handle potential YAML parsing errors
+        if (e instanceof yaml.YAMLException) {
+            console.error("Failed to parse docker-compose content:", e.message);
+            // Rethrow as a generic error or handle as needed
+            throw new Error(`Invalid YAML input: ${e.message}`);
+        } else {
+            // Handle other unexpected errors
+            console.error("An unexpected error occurred:", e);
+            throw e; // Re-throw unexpected errors
+        }
+        // If you prefer not to throw on parsing errors, you could return original content:
+        // return dockerComposeContent;
     }
 }

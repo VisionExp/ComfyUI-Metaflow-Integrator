@@ -9,7 +9,7 @@ import {existsSync, readdirSync, statSync, readFileSync, mkdirSync, PathLike, pr
 import si from 'systeminformation';
 import {
     copyResourcesOnFirstRun,
-    createContainerAndFoldersStructure,
+    removeServiceFromCompose,
     createOrUpdateDockerCompose,
     startHardwareStatsBroadcast,
     stopStatsBroadcast,
@@ -189,6 +189,9 @@ app.whenReady().then(() => {
     ipcMain.handle('api:removeContainer', async (_, arg:{containerName: string}) => {
         try {
             const containerDir = path.join(appWorkDirectory, 'containers', arg.containerName);
+            const dockerComposeContent = await fsPromises.readFile(baseDockerComposeFile, 'utf8');
+            const updatedDockerCompose = removeServiceFromCompose(dockerComposeContent, arg.containerName);
+            await fsPromises.writeFile(baseDockerComposeFile, updatedDockerCompose);
             await fsPromises.rm(containerDir, { recursive: true, force: true });
             sendLog(`Removed container ${arg.containerName}`);
             return { success: true };
